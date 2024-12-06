@@ -19,9 +19,13 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Scanner;
 
 import javafx.scene.control.Alert.AlertType;
+import javafx.scene.chart.LineChart; // <--- Import for LineChart
+import javafx.scene.chart.NumberAxis; // <--- Import for LineChart Axis
+import javafx.scene.chart.XYChart; // <--- Import for LineChart Series
 
 
 public class Main extends Application {
@@ -54,6 +58,19 @@ public class Main extends Application {
     private volatile boolean running = true;
     private boolean isCelsius = true;
     private double lastTemperatureCelsius1 = 0.0, lastTemperatureCelsius2 = 0.0, lastTemperatureCelsius3 = 0.0;
+    private double lastMQ135Val1 = 0.0, lastMQ135Val2 = 0.0, lastMQ135Val3 = 0.0;
+    private Scene graphScene;
+    private LineChart<Number, Number> lineChart;
+    private XYChart.Series<Number, Number> temperatureSeries1;
+    private XYChart.Series<Number, Number> temperatureSeries2;
+    private XYChart.Series<Number, Number> temperatureSeries3;
+    private LineChart<Number, Number> airQualityChart;
+    private XYChart.Series<Number, Number> airQualitySeries1;
+    private XYChart.Series<Number, Number> airQualitySeries2;
+    private XYChart.Series<Number, Number> airQualitySeries3;
+    private int timeElapsed = 0;
+    private NumberAxis xAxis = new NumberAxis();
+    private boolean showingAirQuality = false;
 
     @Override
     public void start(Stage primaryStage) {
@@ -76,6 +93,7 @@ public class Main extends Application {
         prepareHeatmapScreen();
         prepareSensorDataScreen();
         prepareLogScreen();
+        prepareGraphScene();
 
         primaryStage.setScene(welcomeScene);
         primaryStage.show();
@@ -177,6 +195,7 @@ public class Main extends Application {
         // Style the navigation buttons with hover effect
         Button toSensorData = new Button("View Sensor Data");
         Button toLog = new Button("View Log");
+        Button toGraph = new Button("View Graph");
 
         String navButtonBaseStyle = "-fx-background-color: #DC143C; -fx-text-fill: white; -fx-font-size: 14; " +
                 "-fx-padding: 10 20; -fx-background-radius: 5; -fx-cursor: hand;";
@@ -202,6 +221,7 @@ public class Main extends Application {
         // Set actions for navigation buttons
         toSensorData.setOnAction(e -> mainStage.setScene(sensorDataScene));
         toLog.setOnAction(e -> mainStage.setScene(logScene));
+        toGraph.setOnAction(e -> mainStage.setScene(graphScene));
 
         // Layout arrangement remains the same
         HBox leftButton = new HBox(10, firstLabel, libButton);
@@ -225,7 +245,7 @@ public class Main extends Application {
         rightLayout.setTranslateX(160);
         rightLayout.setPadding(new Insets(0, 10, 0, 10));
 
-        HBox bottomLayout = new HBox(10, toSensorData, toLog);
+        HBox bottomLayout = new HBox(10, toSensorData, toLog, toGraph);
         bottomLayout.setAlignment(Pos.CENTER);
         bottomLayout.setPadding(new Insets(20, 0, 20, 0));
 
@@ -242,6 +262,7 @@ public class Main extends Application {
         heatmapScene = new Scene(borderPane, 800, 550);
     }
 
+    // Method to show a popup
     private void showPopup(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
 
@@ -333,24 +354,46 @@ public class Main extends Application {
 
     private void prepareLogScreen() {
         Label logLabel = new Label("Log Screen - Sensor Data Transmission Log");
+        logLabel.setStyle("-fx-font-size: 18; -fx-font-weight: bold; -fx-text-fill: #37474F;");
+
+        // Log area with styling to preserve data display
         logTextArea = new TextArea();
         logTextArea.setEditable(false);
         logTextArea.setWrapText(true);
-        redirectSystemOutput();
-        Button toHeatmap = new Button("View Heatmap");
-        toHeatmap.setStyle("-fx-background-color: #FAEBD7");
-        Button toSensorData = new Button("View Sensor Data");
-        toSensorData.setStyle("-fx-background-color: #DC143C");
+        logTextArea.setPrefHeight(350); // Adjust for desired height
+        logTextArea.setStyle(
+                "-fx-control-inner-background: #FAFAFA; -fx-border-color: #B0BEC5; " +
+                        "-fx-border-radius: 5; -fx-padding: 8; -fx-font-size: 14; -fx-font-family: 'Consolas';"
+        );
 
+        // Improved button styling
+        Button toHeatmap = new Button("View Heatmap");
+        toHeatmap.setStyle(
+                "-fx-background-color: linear-gradient(#64B5F6, #1976D2); -fx-text-fill: white; " +
+                        "-fx-background-radius: 8; -fx-padding: 8 16; -fx-font-size: 14;"
+        );
+        Button toSensorData = new Button("View Sensor Data");
+        toSensorData.setStyle(
+                "-fx-background-color: linear-gradient(#FF8A80, #D32F2F); -fx-text-fill: white; " +
+                        "-fx-background-radius: 8; -fx-padding: 8 16; -fx-font-size: 14;"
+        );
+
+        // Navigation button actions
         toHeatmap.setOnAction(e -> mainStage.setScene(heatmapScene));
         toSensorData.setOnAction(e -> mainStage.setScene(sensorDataScene));
 
-        HBox hlayout = new HBox(10, toHeatmap, toSensorData);
-        hlayout.setAlignment(Pos.CENTER);
-        VBox layout = new VBox(10, logLabel, logTextArea, hlayout);
-        layout.setAlignment(Pos.CENTER);
-        layout.setPadding(new Insets(10));
+        // Layout for the buttons
+        HBox buttonLayout = new HBox(15, toHeatmap, toSensorData);
+        buttonLayout.setAlignment(Pos.CENTER);
+        buttonLayout.setPadding(new Insets(10));
 
+        // Main layout for the log screen
+        VBox layout = new VBox(15, logLabel, logTextArea, buttonLayout);
+        layout.setAlignment(Pos.CENTER);
+        layout.setPadding(new Insets(15));
+        layout.setStyle("-fx-background-color: #E3F2FD;"); // Light blue background for the layout
+
+        redirectSystemOutput();
         logScene = new Scene(layout, 800, 550);
     }
 
@@ -408,6 +451,7 @@ public class Main extends Application {
                 latestVoltage1 = parts[4].split(":")[1].trim();
 
                 lastTemperatureCelsius1 = Double.parseDouble(latestTemperature1);
+                lastMQ135Val1 = Double.parseDouble(latestMq135Value1);
                 temperatureLabel1.setText("Temperature: " + (isCelsius ? String.format("%.2f", lastTemperatureCelsius1) + " °C" : String.format("%.2f", (lastTemperatureCelsius1 * 9 / 5) + 32) + " °F"));
                 humidityLabel1.setText("Humidity: " + latestHumidity1 + " %");
                 mq135Label1.setText("MQ135 Sensor Value: " + latestMq135Value1);
@@ -423,6 +467,7 @@ public class Main extends Application {
                 latestVoltage2 = parts[4].split(":")[1].trim();
 
                 lastTemperatureCelsius2 = Double.parseDouble(latestTemperature2);
+                lastMQ135Val2 = Double.parseDouble(latestMq135Value2);
                 temperatureLabel2.setText("Temperature: " + (isCelsius ? String.format("%.2f", lastTemperatureCelsius2) + " °C" : String.format("%.2f", (lastTemperatureCelsius2 * 9 / 5) + 32) + " °F"));
                 humidityLabel2.setText("Humidity: " + latestHumidity2 + " %");
                 mq135Label2.setText("MQ135 Sensor Value: " + latestMq135Value2);
@@ -438,11 +483,13 @@ public class Main extends Application {
                 latestVoltage3 = parts[4].split(":")[1].trim();
 
                 lastTemperatureCelsius3 = Double.parseDouble(latestTemperature3);
+                lastMQ135Val3 = Double.parseDouble(latestMq135Value3);
                 temperatureLabel3.setText("Temperature: " + (isCelsius ? String.format("%.2f", lastTemperatureCelsius3) + " °C" : String.format("%.2f", (lastTemperatureCelsius3 * 9 / 5) + 32) + " °F"));
                 humidityLabel3.setText("Humidity: " + latestHumidity3 + " %");
                 mq135Label3.setText("MQ135 Sensor Value: " + latestMq135Value3);
                 voltageLabel3.setText("Voltage: " + latestVoltage3);
             }
+            updateGraphScene();
         });
     }
 
@@ -520,6 +567,104 @@ public class Main extends Application {
             System.out.println("Invalid MQ135 value: " + mq135Value);
         }
     }
+
+    private void prepareGraphScene() {
+        // Create axes for the temperature chart
+        NumberAxis xAxisTemp = new NumberAxis();
+        xAxisTemp.setLabel("Time (s)");
+        NumberAxis yAxisTemp = new NumberAxis();
+        yAxisTemp.setLabel("Temperature (°C)");
+
+        // Create the temperature line chart
+        LineChart<Number, Number> temperatureChart = new LineChart<>(xAxisTemp, yAxisTemp);
+        temperatureChart.setTitle("Temperature Data Over Time");
+
+        // Initialize temperature series for each sensor
+        temperatureSeries1 = new XYChart.Series<>();
+        temperatureSeries1.setName("Sensor 1");
+        temperatureSeries2 = new XYChart.Series<>();
+        temperatureSeries2.setName("Sensor 2");
+        temperatureSeries3 = new XYChart.Series<>();
+        temperatureSeries3.setName("Sensor 3");
+
+        // Add temperature series to the temperature chart
+        temperatureChart.getData().addAll(temperatureSeries1, temperatureSeries2, temperatureSeries3);
+
+        // Create axes for the air quality chart
+        NumberAxis xAxisAirQuality = new NumberAxis();
+        xAxisAirQuality.setLabel("Time (s)");
+        NumberAxis yAxisAirQuality = new NumberAxis();
+        yAxisAirQuality.setLabel("Air Quality Value");
+
+        // Create the air quality line chart
+        airQualityChart = new LineChart<>(xAxisAirQuality, yAxisAirQuality);
+        airQualityChart.setTitle("Air Quality Data Over Time");
+
+        // Initialize air quality series for each sensor
+        airQualitySeries1 = new XYChart.Series<>();
+        airQualitySeries1.setName("Sensor 1");
+        airQualitySeries2 = new XYChart.Series<>();
+        airQualitySeries2.setName("Sensor 2");
+        airQualitySeries3 = new XYChart.Series<>();
+        airQualitySeries3.setName("Sensor 3");
+
+        // Add air quality series to the air quality chart
+        airQualityChart.getData().addAll(airQualitySeries1, airQualitySeries2, airQualitySeries3);
+
+        // Button to navigate back to the heatmap scene
+        Button backToHeatmap = new Button("Back to Heatmap");
+        backToHeatmap.setOnAction(e -> mainStage.setScene(heatmapScene));
+
+        // Button to toggle between temperature and air quality graphs
+        Button toggleView = new Button("Toggle to Air Quality View");
+        toggleView.setOnAction(e -> toggleGraphView(temperatureChart, airQualityChart, toggleView));
+
+        // Layout to hold the charts and buttons
+        VBox layout = new VBox(10, temperatureChart, backToHeatmap, toggleView);
+        layout.setAlignment(Pos.CENTER);
+        layout.setPadding(new Insets(10));
+
+        graphScene = new Scene(layout, 800, 550);
+    }
+
+    private void toggleGraphView(LineChart<Number, Number> temperatureChart, LineChart<Number, Number> airQualityChart, Button toggleView) {
+        if (showingAirQuality) {
+            // Switch to temperature view
+            Button backToHeatmap = new Button("Back to Heatmap");
+            VBox layout = new VBox(10, temperatureChart, backToHeatmap, toggleView);
+            backToHeatmap.setOnAction(e -> mainStage.setScene(heatmapScene));
+            layout.setAlignment(Pos.CENTER);
+            layout.setPadding(new Insets(10));
+            graphScene.setRoot(layout);
+            toggleView.setText("Toggle to Air Quality View");
+        } else {
+            // Switch to air quality view
+            Button backToHeatmap = new Button("Back to Heatmap");
+            VBox layout2 = new VBox(10, airQualityChart, backToHeatmap, toggleView);
+            backToHeatmap.setOnAction(e -> mainStage.setScene(heatmapScene));
+            layout2.setAlignment(Pos.CENTER);
+            layout2.setPadding(new Insets(10));
+            graphScene.setRoot(layout2);
+            toggleView.setText("Toggle to Temperature View");
+        }
+        showingAirQuality = !showingAirQuality;
+    }
+
+    private void updateGraphScene() {
+        // Add new points to the temperature graph using the latest temperature readings and elapsed time
+        temperatureSeries1.getData().add(new XYChart.Data<>(timeElapsed, lastTemperatureCelsius1));
+        temperatureSeries2.getData().add(new XYChart.Data<>(timeElapsed, lastTemperatureCelsius2));
+        temperatureSeries3.getData().add(new XYChart.Data<>(timeElapsed, lastTemperatureCelsius3));
+
+        // Add new points to the air quality graph using the latest MQ135 values and elapsed time
+        airQualitySeries1.getData().add(new XYChart.Data<>(timeElapsed, lastMQ135Val1));
+        airQualitySeries2.getData().add(new XYChart.Data<>(timeElapsed, lastMQ135Val2));
+        airQualitySeries3.getData().add(new XYChart.Data<>(timeElapsed, lastMQ135Val3));
+
+        // Increment the time for the next point
+        timeElapsed++;
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
